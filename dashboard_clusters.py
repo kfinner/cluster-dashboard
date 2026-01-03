@@ -174,8 +174,8 @@ def main():
     z_vals = pd.to_numeric(master["z_best"], errors="coerce")
     Z_MIN, Z_MAX = float(z_vals.min() or 0.0), float(z_vals.max() or 3.0)
     m_vals = pd.to_numeric(master["mass_best"], errors="coerce")
-    M_MIN, M_MAX = float(m_vals.min() or 0.0)/MASS_UNIT, float(m_vals.max() or 15.0)/MASS_UNIT
-
+    M_MIN, M_MAX = float(m_vals.min() or 0.0)/MASS_UNIT, float(m_vals.max() or 15.0)/   MASS_UNIT
+    
     if "selected_master_id" not in st.session_state:
         st.session_state["selected_master_id"] = int(master.iloc[0]["master_id"])
 
