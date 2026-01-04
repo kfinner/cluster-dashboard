@@ -29,7 +29,6 @@ SURVEYS: Dict[str, Optional[str]] = {
 # --- Helpers ---
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    # Pointing to the new optimized file by default
     p.add_argument("--master", type=Path, default=Path("master_clusters.parquet"))
     p.add_argument("--fov-arcmin", type=float, default=DEFAULT_FOV_ARCMIN)
     return p.parse_args()
@@ -38,15 +37,17 @@ def parse_args() -> argparse.Namespace:
 def load_data(path: Path) -> Optional[pd.DataFrame]:
     if path.exists():
         df = pd.read_parquet(path) if path.suffix == '.parquet' else pd.read_csv(path, low_memory=False)
-        # Fallback: If you forgot to run the optimization script, we calculate it once here.
         if "ra_wrapped" not in df.columns and "ra_deg" in df.columns:
             df["ra_wrapped"] = np.where(df["ra_deg"] > 180, df["ra_deg"] - 360, df["ra_deg"])
+        
+        for col in ["z_best", "mass_best", "n_catalogs", "ra_deg", "dec_deg"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
     return None
 
 @st.cache_data(show_spinner=False)
 def get_static_bg(df: pd.DataFrame) -> pd.DataFrame:
-    # No calculation needed here anymore, just sampling
     return df.sample(n=min(len(df), 15000))
 
 def fmt_float(x, fmt="{:.4g}"):
@@ -56,7 +57,7 @@ def fmt_float(x, fmt="{:.4g}"):
         return fmt.format(xf) if np.isfinite(xf) else "—"
     except: return str(x)
 
-# --- State & Filter Logic (Unchanged) ---
+# --- State & Filter Logic ---
 def reset_redshift(z_min, z_max):
     st.session_state["f_zmin"], st.session_state["f_zmax"] = z_min, z_max
 def reset_mass(m_min, m_max):
@@ -101,9 +102,15 @@ def apply_filters(df, z_range, mass_range, ncat_range, required_cats, keep_nans,
     out = df.copy()
     for col, rng, must in [("z_best", z_range, must_z), ("mass_best", mass_range, must_m)]:
         v = pd.to_numeric(out[col], errors="coerce")
-        if must: out = out[v.notna()]
-        v = pd.to_numeric(out[col], errors="coerce")
-        out = out[(v.isna() if keep_nans else False) | ((v >= rng[0]) & (v <= rng[1]))]
+        if must:
+            out = out[v.notna()]
+            v = pd.to_numeric(out[col], errors="coerce")
+        if keep_nans:
+            mask = v.isna() | ((v >= rng[0]) & (v <= rng[1]))
+        else:
+            mask = v.notna() & (v >= rng[0]) & (v <= rng[1])
+        out = out[mask]
+
     if "n_catalogs" in out.columns:
         n = pd.to_numeric(out["n_catalogs"], errors="coerce").fillna(0)
         out = out[(n >= ncat_range[0]) & (n <= ncat_range[1])]
@@ -111,53 +118,28 @@ def apply_filters(df, z_range, mass_range, ncat_range, required_cats, keep_nans,
         if f"name__{cat}" in out.columns: out = out[out[f"name__{cat}"].notna()]
     return out
 
-# --- Visualizations (Optimized) ---
+# --- Visualizations ---
 @st.fragment
 def render_plots(bg_sample, filtered_df, selected_id):
     p1, p2 = st.columns([1, 1])
-    
     with p1:
         fig = go.Figure()
-        
-        # 1. Background: Uses pre-calculated 'ra_wrapped' directly
-        fig.add_trace(go.Scattergeo(
-            lat=bg_sample["dec_deg"], lon=bg_sample["ra_wrapped"], 
-            mode='markers', marker=dict(color="#E5ECF6", size=2), 
-            name="All", hoverinfo='skip'
-        ))
-        
-        # 2. Filtered: No .apply() call here anymore!
+        fig.add_trace(go.Scattergeo(lat=bg_sample["dec_deg"], lon=bg_sample["ra_wrapped"], mode='markers', marker=dict(color="#E5ECF6", size=2), name="All"))
         disp_df = filtered_df if len(filtered_df) < 5000 else filtered_df.sample(5000)
-        fig.add_trace(go.Scattergeo(
-            lat=disp_df["dec_deg"], lon=disp_df["ra_wrapped"], 
-            mode='markers', marker=dict(color="black", size=4, opacity=0.6), 
-            name="Filtered"
-        ))
-        
-        # 3. Selected
+        fig.add_trace(go.Scattergeo(lat=disp_df["dec_deg"], lon=disp_df["ra_wrapped"], mode='markers', marker=dict(color="black", size=4, opacity=0.6), name="Filtered"))
         sel_df = filtered_df[filtered_df["master_id"] == selected_id]
         if not sel_df.empty:
-            fig.add_trace(go.Scattergeo(
-                lat=sel_df["dec_deg"], lon=sel_df["ra_wrapped"], 
-                mode='markers', marker=dict(color="red", size=12, symbol="circle", line=dict(color='white', width=2)), 
-                name="Selected"
-            ))
-
+            fig.add_trace(go.Scattergeo(lat=sel_df["dec_deg"], lon=sel_df["ra_wrapped"], mode='markers', marker=dict(color="red", size=12, symbol="circle", line=dict(color='white', width=2)), name="Selected"))
         fig.update_geos(projection_type="mollweide", showland=False, showcoastlines=False, showframe=True, bgcolor="white")
-        fig.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0), uirevision='constant', showlegend=False, dragmode="pan")
-        st.plotly_chart(fig, use_container_width=True, key="sky_map", config={'displayModeBar': False})
-
+        fig.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0), uirevision='constant', showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
     with p2:
-        z_all = pd.to_numeric(bg_sample["z_best"], errors="coerce").dropna()
         z_fg = pd.to_numeric(filtered_df["z_best"], errors="coerce").dropna()
-        
         fig_z = go.Figure()
-        fig_z.add_trace(go.Histogram(x=z_all, nbinsx=50, name="Catalog", marker_color="#E5ECF6", opacity=0.7))
         fig_z.add_trace(go.Histogram(x=z_fg, nbinsx=50, name="Filtered", marker_color="black"))
-        fig_z.update_layout(barmode='overlay', height=400, margin=dict(l=0, r=0, t=30, b=0), uirevision='constant', xaxis_title="Redshift (z)", showlegend=False)
-        st.plotly_chart(fig_z, use_container_width=True, key="z_hist", config={'displayModeBar': False})
+        fig_z.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0), uirevision='constant', xaxis_title="Redshift (z)", showlegend=False)
+        st.plotly_chart(fig_z, use_container_width=True)
 
-# --- Main App ---
 def aladin_html(ra, dec, fov, survey_id, label):
     return f"""<!doctype html><html><head><script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script></head><body style="margin:0"><div id="al" style="width:100%;height:500px"></div><script>A.init.then(()=>{{var a=A.aladin('#al',{{target:'{ra} {dec}',fov:{fov/60},survey:'{survey_id if survey_id else ""}'}});a.addCatalog(A.catalog().addSources([A.source({ra},{dec},{{name:'{label}'}})]));}});</script></body></html>"""
 
@@ -170,26 +152,18 @@ def main():
     blob, blob_compact = build_search_blobs(master)
     bg_sample = get_static_bg(master)
 
-    # ... (Stats setup same as before) ...
     z_vals = pd.to_numeric(master["z_best"], errors="coerce")
     Z_MIN, Z_MAX = float(z_vals.min() or 0.0), float(z_vals.max() or 3.0)
     m_vals = pd.to_numeric(master["mass_best"], errors="coerce")
-    M_MIN, M_MAX = float(m_vals.min() or 0.0)/MASS_UNIT, float(m_vals.max() or 15.0)/   MASS_UNIT
+    M_MIN, M_MAX = float(m_vals.min() or 0.0)/MASS_UNIT, float(m_vals.max() or 15.0)/MASS_UNIT
     
     if "selected_master_id" not in st.session_state:
         st.session_state["selected_master_id"] = int(master.iloc[0]["master_id"])
 
-    # UI Layout
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1: name_query = st.text_input("Search Name:", value="", key="q_name")
-    with c2: 
-        ra_active = st.session_state.get("f_ra_search") is not None
-        sort_opts = (["sep_arcmin"] if ra_active else []) + ["name_best", "z_best", "mass_best", "n_catalogs"]
-        sort_by = st.selectbox("Sort by", sort_opts, key="q_sort")
-    with c3: max_rows = st.number_input("Max Table Rows", 200, 50000, 2000, key="q_rows")
+    # --- TOP SEARCH BAR ---
+    name_query = st.text_input("Search Name:", value="", key="q_name")
 
     with st.expander("Scientific Filters", expanded=True):
-        # ... (Filters UI unchanged) ...
         r1_c1, r1_c2, r1_c3 = st.columns([1, 1, 1.8])
         with r1_c1:
             zc1, zc2 = st.columns(2)
@@ -221,47 +195,50 @@ def main():
             qc[1].checkbox("Must z", value=False, key="f_mustz")
             qc[2].checkbox("Must M", value=False, key="f_mustm")
 
-    # Pipeline
+    # Filter Pipeline
     view = apply_search(master, blob, blob_compact, name_query)
     view = apply_spatial_filter(view, ra_v, dec_v, rad_v)
     view = apply_filters(view, (z_min, z_max), (m_min*MASS_UNIT, m_max*MASS_UNIT), (n_min, n_max), required_cats, st.session_state.f_nan, st.session_state.f_mustz, st.session_state.f_mustm)
 
-    if sort_by in view.columns:
-        view = view.sort_values(sort_by, ascending=(sort_by in ["name_best", "sep_arcmin"]))
-
     render_plots(bg_sample, view, st.session_state["selected_master_id"])
 
-    # Table
+    # --- THE CLUSTERS SECTION WITH INTEGRATED SORTING ---
     st.divider()
-    left, right = st.columns([1.5, 1.5], gap="large") # Slightly more balanced column ratio
+    st.header(f"Clusters ({len(view):,})")
+    
+    # Sorting UI placed right under the title
+    sc1, sc2, sc3 = st.columns([1.5, 1, 1])
+    with sc1:
+        sort_by = st.selectbox("Sort Whole Catalog By:", 
+                              ["name_best", "z_best", "mass_best", "n_catalogs", "ra_deg"], index=0)
+    with sc2:
+        sort_order = st.radio("Order:", ["Ascending", "Descending"], index=0 if sort_by == "name_best" else 1, horizontal=True)
+    with sc3:
+        max_rows = st.number_input("Display Limit", 100, 20000, 2000)
+
+    # Apply Global Pandas Sort
+    if sort_by in view.columns:
+        view = view.sort_values(by=sort_by, ascending=(sort_order == "Ascending"), na_position='last')
+
+    left, right = st.columns([1.5, 1.5], gap="large") 
     with left:
-        st.subheader(f"Catalog ({len(view):,} entries)")
-        
-        gb = GridOptionsBuilder.from_dataframe(view.head(max_rows))
-        
-        # This is the key change: 
-        # flex=1 makes columns grow to fill the container width.
-        # minWidth=100 ensures they don't get too small to read.
-        gb.configure_default_column(
-            resizable=True, 
-            sortable=True, 
-            filter=True, 
-            minWidth=100, 
-            flex=1
-        )
-        
-        # Keep the name column pinned to the left so it stays put
+        display_df = view.head(int(max_rows)).copy()
+
+        gb = GridOptionsBuilder.from_dataframe(display_df)
+        gb.configure_default_column(resizable=True, filter=True, minWidth=100, flex=1, sortable=False)
         gb.configure_column("name_best", pinned='left', width=180, flex=0)
-        
         gb.configure_selection(selection_mode="single")
         
+        grid_key = f"grid_{sort_by}_{sort_order}_{len(view)}_{name_query[:3]}"
+        
         grid_resp = AgGrid(
-            view.head(max_rows), 
+            display_df, 
             gridOptions=gb.build(), 
             height=500, 
             theme="streamlit", 
-            # This mode ensures the table takes up 100% of the 'left' column width
-            columns_auto_size_mode=ColumnsAutoSizeMode.FIT_ALL_COLUMNS_TO_VIEW 
+            columns_auto_size_mode=ColumnsAutoSizeMode.FIT_ALL_COLUMNS_TO_VIEW,
+            key=grid_key,
+            update_mode="MODEL_CHANGED"
         )
         
         sel = grid_resp.get("selected_rows", [])
@@ -270,23 +247,20 @@ def main():
         elif isinstance(sel, list) and len(sel) > 0: 
             st.session_state["selected_master_id"] = int(sel[0].get("master_id"))
 
-    # Details
+    # Details Section
     if not master[master["master_id"] == st.session_state["selected_master_id"]].empty:
         row = master[master["master_id"] == st.session_state["selected_master_id"]].iloc[0]
         with right:
-            sc1, sc2 = st.columns([1, 1.4])
-            with sc1:
+            dc1, dc2 = st.columns([1, 1.4])
+            with dc1:
                 st.subheader("Summary")
                 st.markdown(f"**Best Name:** {row['name_best']}")
                 st.markdown(f"**Redshift (z):** {fmt_float(row['z_best'])}")
                 st.markdown(f"**Mass:** {fmt_float(row['mass_best']/MASS_UNIT)} $10^{{14}} M_{{\odot}}$")
-                if pd.notna(row.get('mass_min')):
-                    st.markdown(f"**Mass Range:** {fmt_float(row['mass_min']/MASS_UNIT)} – {fmt_float(row['mass_max']/MASS_UNIT)}")
-                st.markdown(f"**N Catalogs:** {int(row['n_catalogs'])}")
                 with st.expander("Alternate Names"):
                     st.write(", ".join([str(row[c]) for c in master.columns if c.startswith("name__") and pd.notna(row[c])]))
                 st.caption(f"RA: {row['ra_deg']:.4f}, Dec: {row['dec_deg']:.4f}")
-            with sc2:
+            with dc2:
                 survey = st.selectbox("Aladin Survey", list(SURVEYS.keys()), key="al_srv")
                 st.components.v1.html(aladin_html(row['ra_deg'], row['dec_deg'], args.fov_arcmin, SURVEYS[survey], row['name_best']), height=500)
 
