@@ -39,7 +39,6 @@ zwicky_dict = {"name": "zwicky_name", "Nmem": "GalCnt"}
 ciza1_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
 ciza2_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
 
-
 MASS_SCALE_TO_MSUN = {"psz2": 1e14, "mcxc": 1e14, "spt": 1e14, "spt_ecs": 1e14, "act_hilton": 1e14, "mcxc2": 1e14}
 MASS_MIN_MSUN, MASS_MAX_MSUN = 1e12, 1e16
 
@@ -66,12 +65,10 @@ def apply_catalog_prefix(val, prefix_from_dict, ra=None, dec=None):
     else:
         s = str(val).strip()
     if prefix_from_dict == "RCS":
-        if not s.upper().startswith("RCS"):
-            return f"RCS {s}"
+        if not s.upper().startswith("RCS"): return f"RCS {s}"
         return s
     if prefix_from_dict == "XLSSC":
-        if not s.upper().startswith("XLSSC"):
-            return f"XLSSC {s}"
+        if not s.upper().startswith("XLSSC"): return f"XLSSC {s}"
         return s
     if prefix_from_dict == "ACO":
         if s.lower().startswith("abell"): return s
@@ -283,15 +280,25 @@ def main():
     print("\n[stage] merging suffixed catalog-specific columns...")
     for spec in CATALOGS:
         if spec.name in per_cat_norm:
-            sub = membership_df[membership_df["catalog"] == spec.name][["master_id", "row_id"]]
+            # FIX: Prevent row count ballooning by deduplicating memberships per master_id
+            # Sort by separation and keep only the closest match per catalog
+            sub = membership_df[membership_df["catalog"] == spec.name].copy()
+            sub = sub.sort_values("sep_arcsec").drop_duplicates(subset=["master_id"], keep="first")
+            sub = sub[["master_id", "row_id"]]
+            
             cat_subset = per_cat_norm[spec.name][["row_id"] + list(spec.colmap.keys())]
             merged = sub.merge(cat_subset, on="row_id").drop(columns="row_id")
             merged.columns = [f"{c}__{spec.name}" if c != "master_id" else c for c in merged.columns]
             if f"name__{spec.name}" in merged.columns:
                 merged[f"name__{spec.name}"] = merged[f"name__{spec.name}"].astype(str)
+            
+            # Use left join to ensure we only attach columns to the master list
             master_df = master_df.merge(merged, on="master_id", how="left")
 
     master_df["ra_wrapped"] = np.where(master_df["ra_deg"] > 180, master_df["ra_deg"] - 360, master_df["ra_deg"])
+
+    # Final guardrail to ensure master_id remains unique
+    master_df = master_df.drop_duplicates(subset=["master_id"])
 
     master_df.to_parquet(args.outdir / "master_clusters.parquet", index=False)
     print(f"\n[done] Saved {len(master_df):,} clusters.")
