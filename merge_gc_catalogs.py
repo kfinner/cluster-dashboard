@@ -35,7 +35,7 @@ erass_dict = {"name": "Name", "z": "zBest"}
 macs_dist = {"name": "MACS", "z": "z"}
 rcs2_dict = {"name": "RCS", "z": "z" }
 xxl_dict = {"name": "XLSSC", "z": "z", "Nmem": "Ngal"}
-zwicky_dict = {"name": "Zwicky", "Nmem": "GalCnt"}
+zwicky_dict = {"name": "zwicky_name", "Nmem": "GalCnt"}
 ciza1_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
 ciza2_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
 
@@ -65,6 +65,10 @@ def apply_catalog_prefix(val, prefix_from_dict, ra=None, dec=None):
         s = str(int(val))
     else:
         s = str(val).strip()
+    if prefix_from_dict == "RCS":
+        if not s.upper().startswith("RCS"):
+            return f"RCS {s}"
+        return s
     if prefix_from_dict == "ACO":
         if s.lower().startswith("abell"): return s
         return f"Abell {s}"
@@ -123,7 +127,7 @@ CATALOGS = [
     CatalogSpec("macs", "macs.csv", macs_dist),
     CatalogSpec("rcs2", "rcs2.csv", rcs2_dict),
     CatalogSpec("xxl", "xxl.csv", xxl_dict),
-    CatalogSpec("zwicky", "zwicky.csv", zwicky_dict),
+    CatalogSpec("zwicky", "zwicky_with_names.csv", zwicky_dict),
     CatalogSpec("ciza1", "ciza1.csv", ciza1_dict),
     CatalogSpec("ciza2", "ciza2.csv", ciza2_dict),
 ]
