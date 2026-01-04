@@ -69,6 +69,10 @@ def apply_catalog_prefix(val, prefix_from_dict, ra=None, dec=None):
         if not s.upper().startswith("RCS"):
             return f"RCS {s}"
         return s
+    if prefix_from_dict == "XLSSC":
+        if not s.upper().startswith("XLSSC"):
+            return f"XLSSC {s}"
+        return s
     if prefix_from_dict == "ACO":
         if s.lower().startswith("abell"): return s
         return f"Abell {s}"
@@ -128,7 +132,7 @@ CATALOGS = [
     CatalogSpec("rcs2", "rcs2.csv", rcs2_dict),
     CatalogSpec("xxl", "xxl.csv", xxl_dict),
     CatalogSpec("zwicky", "zwicky_with_names.csv", zwicky_dict),
-    CatalogSpec("ciza1", "ciza1.csv", ciza1_dict),
+    CatalogSpec("ciza1", "ciza.csv", ciza1_dict),
     CatalogSpec("ciza2", "ciza2.csv", ciza2_dict),
 ]
 
