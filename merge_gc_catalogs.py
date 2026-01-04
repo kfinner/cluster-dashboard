@@ -24,13 +24,23 @@ HSC_camira_dict = {"name": "Name", "zph": "zph", "zsp": "zsp", "Nmem": "Nmem"}
 madcows1_dict = {"name": "Name", "zph": "Photz", "rich": "Rich"}
 madcows2_dict = {"name": "MOO2", "zph": "zphot", "zsp": "zspec", "SNR": "S_N"}
 mcxc_dict = {"name": "MCXC", "original_name": "OName", "mass": "M500", "z": "z"}
+mcxc2_dict = {"name": "MCXC", "original_name": "OName", "mass": "M500", "z": "z"}
 noras_dict = {"name": "RXC", "original_name": "Name", "z": "z"}
 redmapper_dict = {"name": "Name", "Nmem": "Ng", "zsp": "zspec", "zph": "zlambda"}
 reflex_dict = {"name": "RXC", "original_name": "Name", "z": "z", "Nmem": "Ngal"}
 whl_dict = {"name": "WHL", "zph": "zph", "zsp": "zsp", "Nmem": "N200"}
 xcs_dict = {"name": "Name", "z": "z"}
+efeds_dict = {"name": "ID", "z": "z", "SNR": "SNRMax"}
+erass_dict = {"name": "Name", "z": "zBest"}
+macs_dist = {"name": "MACS", "z": "z"}
+rcs2_dict = {"name": "RCS", "z": "z" }
+xxl_dict = {"name": "XLSSC", "z": "z", "Nmem": "Ngal"}
+zwicky_dict = {"name": "Zwicky", "Nmem": "GalCnt"}
+ciza1_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
+ciza2_dict = {"name": "CIZA", "z": "z", "original_name": "Name", }
 
-MASS_SCALE_TO_MSUN = {"psz2": 1e14, "mcxc": 1e14, "spt": 1e14, "spt_ecs": 1e14, "act_hilton": 1e14}
+
+MASS_SCALE_TO_MSUN = {"psz2": 1e14, "mcxc": 1e14, "spt": 1e14, "spt_ecs": 1e14, "act_hilton": 1e14, "mcxc2": 1e14}
 MASS_MIN_MSUN, MASS_MAX_MSUN = 1e12, 1e16
 
 # -----------------------
@@ -108,6 +118,14 @@ CATALOGS = [
     CatalogSpec("madcows2", "madcows2.csv", madcows2_dict),
     CatalogSpec("xcs", "xcs_dr1.csv", xcs_dict),
     CatalogSpec("camira_sdss", "camira_sdss_dr8.csv", camira_sdss_dict),
+    CatalogSpec("efeds", "efeds.csv", efeds_dict),
+    CatalogSpec("erass", "erass.csv", erass_dict),
+    CatalogSpec("macs", "macs.csv", macs_dist),
+    CatalogSpec("rcs2", "rcs2.csv", rcs2_dict),
+    CatalogSpec("xxl", "xxl.csv", xxl_dict),
+    CatalogSpec("zwicky", "zwicky.csv", zwicky_dict),
+    CatalogSpec("ciza1", "ciza1.csv", ciza1_dict),
+    CatalogSpec("ciza2", "ciza2.csv", ciza2_dict),
 ]
 
 # -----------------------
