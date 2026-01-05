@@ -17,14 +17,16 @@ from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
 DEFAULT_FOV_ARCMIN = 12.0
 MASS_UNIT = 1e14 
 
-SURVEYS: Dict[str, Optional[str]] = {
+SURVEYS = {
     "Pan-STARRS DR1 color": "P/PanSTARRS/DR1/color-i-r-g",
     "DSS2 color": "P/DSS2/color",
-    "DESI Legacy Survey (DR9) color": "P/DESI-Legacy-Surveys/DR9/color",
+    # DR10 exists in the public HiPS list; DR9 often does not as a HiPS layer
+    "DESI Legacy Survey (DR10) color": "P/DESI-Legacy-Surveys/DR10/color",
     "2MASS color": "P/2MASS/color",
     "WISE color": "P/WISE/color",
     "Aladin default": None,
 }
+
 
 # --- Helpers ---
 def parse_args() -> argparse.Namespace:
@@ -140,8 +142,50 @@ def render_plots(bg_sample, filtered_df, selected_id):
         fig_z.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0), uirevision='constant', xaxis_title="Redshift (z)", showlegend=False)
         st.plotly_chart(fig_z, use_container_width=True)
 
-def aladin_html(ra, dec, fov, survey_id, label):
-    return f"""<!doctype html><html><head><script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script></head><body style="margin:0"><div id="al" style="width:100%;height:500px"></div><script>A.init.then(()=>{{var a=A.aladin('#al',{{target:'{ra} {dec}',fov:{fov/60},survey:'{survey_id if survey_id else ""}'}});a.addCatalog(A.catalog().addSources([A.source({ra},{dec},{{name:'{label}'}})]));}});</script></body></html>"""
+def aladin_html(ra, dec, fov, survey_id, label, expand_sidebar=True):
+    # If survey_id is None, Aladin uses its default ("P/DSS2/color")
+    survey_js = f"survey: '{survey_id}'," if survey_id else ""
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script>
+  <style>
+    html, body {{ margin:0; padding:0; }}
+    #al {{ width:100%; height:500px; }}
+  </style>
+</head>
+<body>
+  <div id="al"></div>
+  <script>
+    A.init.then(() => {{
+      const a = A.aladin('#al', {{
+        target: '{ra} {dec}',
+        fov: {fov/60.0},
+        {survey_js}
+
+        // --- turn on Aladin Lite native UI ---
+        showLayersControl: true,
+        expandLayersControl: {str(bool(expand_sidebar)).lower()},
+        showGotoControl: true,
+        showZoomControl: true,
+        showFullscreenControl: true,
+
+        // Nice-to-have, similar to the Aladin Lite site:
+        showContextMenu: true,
+        showShareControl: true
+      }});
+
+      // Marker at cluster position
+      const cat = A.catalog({{name: 'Target', sourceSize: 18}});
+      a.addCatalog(cat);
+      cat.addSources([A.source({ra}, {dec}, {{name: '{label}'}})]);
+    }});
+  </script>
+</body>
+</html>"""
+
 
 def main():
     args = parse_args()
