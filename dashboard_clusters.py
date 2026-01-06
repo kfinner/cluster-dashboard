@@ -357,7 +357,7 @@ def main():
     """
     <style>
       /* reduce extra whitespace above/between blocks */
-      .block-container { padding-top: 0.8rem; padding-bottom: 1rem; }
+      .block-container { padding-top: 2.0rem; padding-bottom: 1rem; }
 
       /* tighten vertical spacing between elements */
       div[data-testid="stVerticalBlock"] > div { gap: 0.6rem; }
