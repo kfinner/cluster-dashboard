@@ -583,8 +583,8 @@ def main():
                 st.markdown(f"**Redshift (z):** {fmt_float(row.get('z_best'))}")
                 mb = row.get("mass_best")
                 st.markdown(
-                    f"**Mass:** {fmt_float((mb / MASS_UNIT) if pd.notna(mb) else np.nan)} "
-                    r"$10^{14}\,M_{\odot}$"
+                    r"Mass $M_{500}$: " + f"{fmt_float((mb / MASS_UNIT) if pd.notna(mb) else np.nan)} "
+                    r"$\times 10^{14}\,M_{\odot}$"
                 )
                 with st.expander("Alternate Names"):
                     alts = []
