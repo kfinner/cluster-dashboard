@@ -502,6 +502,27 @@ def main():
             view = view.sort_values(by=sort_by, ascending=(sort_order == "Ascending"), na_position="last")
 
     # -------------------------
+    # Export full filtered catalog
+    # -------------------------
+    csv_export = view.copy()
+
+    # safety: remove any temporary helper columns
+    csv_export = csv_export.drop(columns=["_abell_group", "_abell_num"], errors="ignore")
+
+    # nice-to-have: master_id first
+    if "master_id" in csv_export.columns:
+        cols = ["master_id"] + [c for c in csv_export.columns if c != "master_id"]
+        csv_export = csv_export[cols]
+
+    csv_bytes = csv_export.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label=f"Download all {len(csv_export):,} filtered clusters (CSV)",
+        data=csv_bytes,
+        file_name="filtered_clusters.csv",
+        mime="text/csv",
+    )
+    # -------------------------
     # Layout: table + details
     # -------------------------
     left, right = st.columns([1.2, 1.8], gap="large")
