@@ -5,3 +5,4 @@ plotly
 pyarrow
 streamlit
 streamlit-aggrid
+altair<5
